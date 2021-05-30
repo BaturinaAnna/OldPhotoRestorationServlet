@@ -1,9 +1,8 @@
 package com.example.OldPhotoRestoration;
 
 import java.io.*;
+import java.util.stream.Collectors;
 import javax.servlet.annotation.*;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -13,17 +12,19 @@ import javax.servlet.http.HttpServletResponse;
 @WebServlet(name = "restorationServlet", value = "/restoration-servlet")
 @MultipartConfig
 public class RestorationServlet extends HttpServlet {
-    private final ProcessBuilder processBuilderRestoration = new ProcessBuilder("/home/anna/anaconda3/bin/python",
+    private final ProcessBuilder processBuilderRestorationWithoutScratches = new ProcessBuilder("/home/anna/anaconda3/bin/python",
             "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/run.py",
             "--input_folder", "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/input",
             "--output_folder", "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output"
-//            ,--with_scratch").inheritIO();
-    ).inheritIO();
+            ).inheritIO();
+    private final ProcessBuilder processBuilderRestorationWithScratches = new ProcessBuilder("/home/anna/anaconda3/bin/python",
+            "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/run.py",
+            "--input_folder", "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/input",
+            "--output_folder", "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output",
+            "--with_scratch").inheritIO();
+
     private final String photoPath="/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/input/photoToRestore.jpg";
-    private final Map<String, Integer> photoSize = new HashMap<String, Integer>(){{
-        put("width", null);
-        put("height", null);
-    }};
+    private String removeScratches;
 
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         doPost(request, response);
@@ -34,6 +35,47 @@ public class RestorationServlet extends HttpServlet {
         getPhoto(request);
         runPhotoRestorationNN();
         sendPhoto(response);
+    }
+
+    private void getPhoto(HttpServletRequest request) throws ServletException, IOException {
+        System.out.println("get photo");
+
+        removeScratches = new BufferedReader(new InputStreamReader(request.getPart("removeScratches").getInputStream()))
+                .lines().collect(Collectors.joining("\n"));
+
+        InputStream is = request.getPart("photoToRestore").getInputStream();
+        byte[] buffer = new byte[1024];
+        FileOutputStream out = new FileOutputStream(photoPath);
+        int read;
+        while ((read = is.read(buffer)) > 0) {
+            out.write(buffer, 0, read);
+        }
+        is.close();
+        out.close();
+        System.out.println("Upload");
+    }
+
+    private void runPhotoRestorationNN(){
+        try {
+            System.out.println("run restoration");
+            Process p;
+            if (removeScratches.equals("true")) {
+                p = processBuilderRestorationWithScratches.start();
+            } else {
+                p = processBuilderRestorationWithoutScratches.start();
+            }
+            p.waitFor();
+            BufferedReader bfr = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line = "";
+            while ((line = bfr.readLine()) != null) {
+                System.out.println(line);
+            }
+            p.waitFor();
+            p.destroy();
+            System.out.println("Restored");
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     private void sendPhoto(HttpServletResponse response) throws IOException {
@@ -57,38 +99,5 @@ public class RestorationServlet extends HttpServlet {
             System.out.println(e.getMessage());
         }
         System.out.println("end sending");
-    }
-
-    private void getPhoto(HttpServletRequest request) throws ServletException, IOException {
-        System.out.println("get photo");
-        InputStream is = request.getPart("file").getInputStream();
-        byte[] buffer = new byte[1024];
-        FileOutputStream out = new FileOutputStream(photoPath);
-        int read;
-        while ((read = is.read(buffer)) > 0) {
-            out.write(buffer, 0, read);
-        }
-        is.close();
-        out.close();
-        System.out.println("Upload");
-    }
-
-    private void runPhotoRestorationNN(){
-        try {
-            System.out.println("run restoration");
-            Process p = processBuilderRestoration.start();
-            p.waitFor();
-            BufferedReader bfr = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line = "";
-            while ((line = bfr.readLine()) != null) {
-                System.out.println(line);
-            }
-            p.waitFor();
-            p.destroy();
-            System.out.println("Restored");
-
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-        }
     }
 }
