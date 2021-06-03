@@ -1,7 +1,14 @@
 package com.example.OldPhotoRestoration;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import javax.servlet.annotation.*;
 
 import javax.servlet.ServletException;
@@ -33,6 +40,7 @@ public class RestorationServlet extends HttpServlet {
     public void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         System.out.println("START");
         getPhoto(request);
+        cleanOutputDirectory();
         runPhotoRestorationNN();
         sendPhoto(response);
     }
@@ -78,26 +86,84 @@ public class RestorationServlet extends HttpServlet {
         }
     }
 
+    private void cleanOutputDirectory() throws IOException {
+        System.out.println("Start cleaning");
+        FileUtils.deleteDirectory(new File("/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/final_output"));
+        FileUtils.deleteDirectory(new File("/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/stage_1_restore_output"));
+        FileUtils.deleteDirectory(new File("/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/stage_2_detection_output"));
+        FileUtils.deleteDirectory(new File("/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/stage_3_face_output"));
+        System.out.println("Finish cleaning");
+    }
+
     private void sendPhoto(HttpServletResponse response) throws IOException {
         System.out.println("Sending");
-        String filename = "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/final_output/photoToRestore.png";
-        try {
-            String mime = "image/*";
-            response.setContentType(mime);
-            File file = new File(filename);
-            response.setContentLength((int) file.length());
-            FileInputStream in = new FileInputStream(file);
-            OutputStream out = response.getOutputStream();
-            byte[] buf = new byte[1024];
-            int count = 0;
-            while ((count = in.read(buf)) >= 0) {
-                out.write(buf, 0, count);
+        response.setContentType("application/zip");
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.addHeader("Content-Disposition", "attachment; filename=\"photoArchive.zip\"");
+
+        Collection<File> filesToSend = new ArrayList<File>();
+        String pathToFiles = "/home/anna/Документы/AndroidProject/Bringing-Old-Photos-Back-to-Life/output/";
+
+        filesToSend.add(new File(pathToFiles + "final_output/photoToRestore.png"));
+
+        String[] faces = new File(pathToFiles + "stage_3_face_output/each_img").list();
+        if (faces.length != 0){
+            for( String face : faces) {
+                filesToSend.add(new File(pathToFiles + "stage_3_face_output/each_img/" + face));
+                System.out.println(face);
             }
-            out.close();
-            in.close();
+        }
+
+        OutputStream os = null;
+        BufferedOutputStream bos = null;
+
+        ZipOutputStream zos = null;
+
+        try {
+            os = response.getOutputStream();
+            bos = new BufferedOutputStream(os);
+
+            zos = new ZipOutputStream(bos);
+            zos.setLevel(ZipOutputStream.STORED);
+
+            sendMultipleFiles(zos, filesToSend);
         } catch (IOException e) {
-            System.out.println(e.getMessage());
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        } finally {
+            if (zos != null) {
+                zos.finish();
+                zos.flush();
+                IOUtils.closeQuietly(zos);
+            }
+            IOUtils.closeQuietly(bos);
+            IOUtils.closeQuietly(os);
         }
         System.out.println("end sending");
+    }
+
+    private void sendMultipleFiles(ZipOutputStream zos, Collection<File> filesToSend) throws IOException {
+        for (File f : filesToSend) {
+
+            InputStream inStream = null;
+            ZipEntry ze = null;
+
+            try {
+                inStream = new FileInputStream(f);
+
+                ze = new ZipEntry(f.getName() + "-archived");
+                ze.setComment("Dummy file");
+
+                zos.putNextEntry(ze);
+
+                IOUtils.copy(inStream, zos);
+            } catch (IOException e) {
+                System.out.println("Cannot find " + f.getAbsolutePath());
+            } finally {
+                IOUtils.closeQuietly(inStream);
+                if (ze != null) {
+                    zos.closeEntry();
+                }
+            }
+        }
     }
 }

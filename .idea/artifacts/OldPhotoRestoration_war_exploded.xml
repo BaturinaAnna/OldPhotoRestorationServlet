@@ -13,6 +13,9 @@
         <element id="directory" name="classes">
           <element id="module-output" name="OldPhotoRestoration" />
         </element>
+        <element id="directory" name="lib">
+          <element id="library" level="project" name="Maven: commons-io:commons-io:2.6" />
+        </element>
       </element>
       <element id="directory" name="META-INF">
         <element id="file-copy" path="$PROJECT_DIR$/target/OldPhotoRestoration-1.0-SNAPSHOT/META-INF/MANIFEST.MF" />
