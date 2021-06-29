@@ -151,7 +151,6 @@ public class RestorationServlet extends HttpServlet {
                 inStream = new FileInputStream(f);
 
                 ze = new ZipEntry(f.getName() + "-archived");
-                ze.setComment("Dummy file");
 
                 zos.putNextEntry(ze);
 
